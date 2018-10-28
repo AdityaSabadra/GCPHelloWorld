@@ -16,18 +16,59 @@
 
 package com.example.java.gettingstarted;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
+
+import com.google.cloud.datastore.Datastore;
+import com.google.cloud.datastore.DatastoreOptions;
+import com.google.cloud.datastore.Entity;
+import com.google.cloud.datastore.Key;
 
 @SpringBootApplication
 @RestController
-public class HelloworldApplication {
-  @RequestMapping("/")
-  public String home() {
-    return "Hello World!";
-  }
+public class HelloworldApplication extends SpringBootServletInitializer {
+	private static final String template = "Hello, %s!";
+    private final AtomicLong counter = new AtomicLong();
+    
+    @Override
+	protected SpringApplicationBuilder configure(SpringApplicationBuilder application) {
+		return application.sources(HelloworldApplication.class);
+	}
+
+    @GetMapping("/hello-world")
+    @CrossOrigin(origins = "http://localhost:8080/hello-world")
+    @ResponseBody
+    public Products sayHello(@RequestParam(name="name", required=false, defaultValue="Stranger") String name) {
+    	Datastore datastore = DatastoreOptions.getDefaultInstance().getService();
+    	Key taskKey = datastore.newKeyFactory().setKind(name).newKey(name);
+    	 Entity task = Entity.newBuilder(taskKey)
+    			 .set(name, counter.incrementAndGet())
+    		        //.set("description", "Buy milk")
+    		        .build();
+    	 datastore.put(task);
+    	 System.out.printf("Saved %s: %s%n", task.getKey().getName(), task.getString("description"));
+
+ 	    //Retrieve entity
+ 	    Entity retrieved = datastore.get(taskKey);
+
+ 	    System.out.printf("Retrieved %s: %s%n", taskKey.getName(), retrieved.getString("description"));
+
+        return new Products(counter.incrementAndGet(), String.format(template, name));
+    }
 
   /**
    * (Optional) App Engine health check endpoint mapping.
@@ -44,4 +85,16 @@ public class HelloworldApplication {
   public static void main(String[] args) {
     SpringApplication.run(HelloworldApplication.class, args);
   }
+  
+  @Bean
+  public WebMvcConfigurer corsConfigurer() {
+      return new WebMvcConfigurerAdapter() {
+          @Override
+          public void addCorsMappings(CorsRegistry registry) {
+              registry.addMapping("/hello-world").allowedOrigins("http://localhost:8080");
+          }
+      };
+  }
+  
+ 
 }
